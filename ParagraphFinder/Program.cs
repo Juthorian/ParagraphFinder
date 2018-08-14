@@ -64,11 +64,14 @@ namespace ParagraphFinder
 
                 string postData = "[";
 
+                List<string> paragraphs = new List<string>();
+
                 int count = 0;
                 foreach (string paragraph in convText.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (String.IsNullOrWhiteSpace(paragraph) == false)
                     {
+                        paragraphs.Add(paragraph);
                         List<Char> builder = new List<char>();
                         //Used to fix if there are multiple newlines in a row
                         bool isNewLine = true;
@@ -162,20 +165,23 @@ namespace ParagraphFinder
                 dynamic jsonObj = JsonConvert.DeserializeObject<dynamic>(result);
 
                 List<KeyValuePair<double, int>> cosineNum = new List<KeyValuePair<double, int>>();
+                List<KeyValuePair<double, string>> cosineParagraph = new List<KeyValuePair<double, string>>();
 
                 //Calculates match percent for each return object which correlates to each resume
                 for (int i = 0; i < jsonObj.Count; i++)
                 {
                     double cosineSim = Math.Round((double)jsonObj[i].cosineSimilarity, 3);
+
                     cosineNum.Add(new KeyValuePair<double, int>(cosineSim, i));
+                    cosineParagraph.Add(new KeyValuePair<double, string>(cosineSim, paragraphs[i]));
                 }
                 cosineNum = cosineNum.OrderByDescending(x => x.Key).ToList();
+                cosineParagraph = cosineParagraph.OrderByDescending(x => x.Key).ToList();
 
                 Console.WriteLine("\nTop 10 Results:");
-
                 for (int i = 0; i < 10; i++)
                 {
-                    Console.WriteLine("Paragraph " + cosineNum[i].Value + ": " + cosineNum[i].Key);
+                    Console.WriteLine("Paragraph " + cosineNum[i].Value + ": " + cosineNum[i].Key + " Cosine Similarity\n" + cosineParagraph[i].Value + "\n");
                 }
                 Console.ReadLine();
             }
