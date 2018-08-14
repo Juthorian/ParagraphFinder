@@ -28,7 +28,7 @@ namespace ParagraphFinder
 
             OpenFileDialog fbd = new OpenFileDialog();
             fbd.Title = "Open File";
-            fbd.Filter = "WORD (.docx, .doc, or .pdf)|*.docx;*.doc";
+            fbd.Filter = "WORD (.docx, or .doc,)|*.docx;*.doc";
             fbd.InitialDirectory = fileLocationStart;
 
             if (fbd.ShowDialog() == DialogResult.OK)
@@ -130,8 +130,6 @@ namespace ParagraphFinder
                 }
                 postData = postData.Remove(postData.Length - 1, 1) + "]";
 
-                System.IO.File.WriteAllText(@"C:\\Users\\brahamj\\Downloads\\jsonPost.txt", postData);
-
                 //API Request to cortical.io to compare text taken from document with a keyword the user provided
                 WebRequest webRequest = WebRequest.Create("http://api.cortical.io:80/rest/compare/bulk?retina_name=en_associative");
                 webRequest.Method = "POST";
@@ -178,10 +176,13 @@ namespace ParagraphFinder
                 cosineNum = cosineNum.OrderByDescending(x => x.Key).ToList();
                 cosineParagraph = cosineParagraph.OrderByDescending(x => x.Key).ToList();
 
-                Console.WriteLine("\nTop 10 Results:");
-                for (int i = 0; i < 10; i++)
+                Console.WriteLine("\nResults:\n");
+                for (int i = 0; i < cosineNum.Count; i++)
                 {
-                    Console.WriteLine("Paragraph " + cosineNum[i].Value + ": " + cosineNum[i].Key + " Cosine Similarity\n" + cosineParagraph[i].Value + "\n");
+                    if (cosineNum[i].Key >= 0.25)
+                    {
+                        Console.WriteLine(i + 1 + ".) " + cosineParagraph[i].Value + "\n" + cosineNum[i].Key + " Cosine Similarity\n");
+                    }
                 }
                 Console.ReadLine();
             }
