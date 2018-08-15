@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -18,11 +19,58 @@ namespace ParagraphFinder
         [STAThread]
         static void Main(string[] args)
         {
+            List<string>[] library = null;
+            bool isLibEnabled = true;
+
+            try
+            {
+                //Read lib.txt file
+                var lines = File.ReadLines("lib.txt");
+                int lineCount = File.ReadLines("lib.txt").Count();
+
+                library = new List<string>[lineCount];
+                int count2 = 0;
+
+                foreach (var line in lines)
+                {
+                    var values = line.Split(',');
+                    library[count2] = new List<string>();
+                    foreach (var item in values)
+                    {
+                        library[count2].Add(item);
+                    }
+                    count2++;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Lib file cannot be found or is not formatted in proper csv format! User will be unable to use library functionality and only cortical.io functionality.\nError Message:\n\n" + e.Message + "\n\n");
+                isLibEnabled = false;
+            }
+
             string userName = Environment.UserName;
             string fileLocationStart = "c:\\Users\\" + userName + "\\Desktop\\";
 
             Console.WriteLine("Please enter a keyword:");
             string keyword = Console.ReadLine();
+
+            int inLibNum = -1;
+            //Check if using library
+            if (isLibEnabled == true)
+            {
+                for (int i = 0; i < library.Length; i++)
+                {
+                    if (library[i].Contains(keyword, StringComparer.OrdinalIgnoreCase))
+                    {
+                        inLibNum = i;
+                        break;
+                    }
+                }
+                if (inLibNum != -1)
+                {
+                    Console.WriteLine("Using library! From row " + (inLibNum + 1));
+                }
+            }
 
             Console.WriteLine("\nPlease select a file:");
 
@@ -65,6 +113,8 @@ namespace ParagraphFinder
                 string postData = "[";
 
                 List<string> paragraphs = new List<string>();
+                List<KeyValuePair<double, int>> matchNum = new List<KeyValuePair<double, int>>();
+                List<KeyValuePair<double, string>> matchParagraph = new List<KeyValuePair<double, string>>();
 
                 int count = 0;
                 foreach (string paragraph in convText.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries))
@@ -125,63 +175,126 @@ namespace ParagraphFinder
 
                         postData += "[{\"term\": \"" + keyword + "\"},{\"text\": \"" + newConvText + "\"}],";
 
+                        if (inLibNum != -1)
+                        {
+                            int numExactMatches = 0;
+                            int numCategoryMatches = 0;
+
+                            for (int i = 0; i < library[inLibNum].Count; i++)
+                            {
+                                //Paragraph contains the keyword
+                                if (newConvText.IndexOf(library[inLibNum].ElementAt(i), StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    //Count occurences
+                                    int occurences = Regex.Matches(newConvText, @"\b" + library[inLibNum].ElementAt(i), RegexOptions.IgnoreCase).Count;
+
+                                    //Exact match
+                                    if (String.Equals(keyword, library[inLibNum].ElementAt(i), StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        numExactMatches = numExactMatches + occurences;
+                                    }
+                                    //Categorical match
+                                    else
+                                    {
+                                        numCategoryMatches = numCategoryMatches + occurences;
+                                    }
+                                }
+                            }
+                            double totalMatchScore = 0;
+                            totalMatchScore = (numExactMatches + ((double)numCategoryMatches / 10)) * 10;
+
+                            matchNum.Add(new KeyValuePair<double, int>(totalMatchScore, count));
+                            matchParagraph.Add(new KeyValuePair<double, string>(totalMatchScore, newConvText));
+                        }
                         count++;
                     }
                 }
                 postData = postData.Remove(postData.Length - 1, 1) + "]";
 
-                //API Request to cortical.io to compare text taken from document with a keyword the user provided
-                WebRequest webRequest = WebRequest.Create("http://api.cortical.io:80/rest/compare/bulk?retina_name=en_associative");
-                webRequest.Method = "POST";
-                webRequest.Headers["api-key"] = "bb355cc0-5873-11e8-9172-3ff24e827f76";
-                webRequest.ContentType = "application/json";
-                //Send request with postData string as the body
-                using (var streamWriter = new StreamWriter(webRequest.GetRequestStream()))
+                //Use cortical.io
+                if (inLibNum == -1)
                 {
-                    streamWriter.Write(postData);
-                    streamWriter.Flush();
-                    streamWriter.Close();
-                }
-                string result = "";
-                //Recieve response from cortical.io API
-                try
-                {
-                    WebResponse webResp = webRequest.GetResponse();
-                    using (var streamReader = new StreamReader(webResp.GetResponseStream()))
+                    //API Request to cortical.io to compare text taken from document with a keyword the user provided
+                    WebRequest webRequest = WebRequest.Create("http://api.cortical.io:80/rest/compare/bulk?retina_name=en_associative");
+                    webRequest.Method = "POST";
+                    webRequest.Headers["api-key"] = "bb355cc0-5873-11e8-9172-3ff24e827f76";
+                    webRequest.ContentType = "application/json";
+                    //Send request with postData string as the body
+                    using (var streamWriter = new StreamWriter(webRequest.GetRequestStream()))
                     {
-                        result = streamReader.ReadToEnd();
+                        streamWriter.Write(postData);
+                        streamWriter.Flush();
+                        streamWriter.Close();
+                    }
+                    string result = "";
+                    //Recieve response from cortical.io API
+                    try
+                    {
+                        WebResponse webResp = webRequest.GetResponse();
+                        using (var streamReader = new StreamReader(webResp.GetResponseStream()))
+                        {
+                            result = streamReader.ReadToEnd();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("\nCannot connect to cortical.io API. Aborting!\n\nError: " + ex.Message);
+                        Console.ReadLine();
+                        return;
+                    }
+
+                    //Formats return string as JSON
+                    dynamic jsonObj = JsonConvert.DeserializeObject<dynamic>(result);
+
+                    List<KeyValuePair<double, int>> cosineNum = new List<KeyValuePair<double, int>>();
+                    List<KeyValuePair<double, string>> cosineParagraph = new List<KeyValuePair<double, string>>();
+
+                    //Calculates match percent for each return object which correlates to each resume
+                    for (int i = 0; i < jsonObj.Count; i++)
+                    {
+                        double cosineSim = Math.Round((double)jsonObj[i].cosineSimilarity, 3);
+
+                        cosineNum.Add(new KeyValuePair<double, int>(cosineSim, i));
+                        cosineParagraph.Add(new KeyValuePair<double, string>(cosineSim, paragraphs[i]));
+                    }
+                    cosineNum = cosineNum.OrderByDescending(x => x.Key).ToList();
+                    cosineParagraph = cosineParagraph.OrderByDescending(x => x.Key).ToList();
+
+                    bool resultsFound = false;
+
+                    Console.WriteLine("\nResults:\n");
+                    for (int i = 0; i < cosineNum.Count; i++)
+                    {
+                        if (cosineNum[i].Key >= 0.25)
+                        {
+                            resultsFound = true;
+                            Console.WriteLine(i + 1 + ".) " + cosineParagraph[i].Value + "\n" + cosineNum[i].Key + " Cosine Similarity\n");
+                        }
+                    }
+                    if (resultsFound == false)
+                    {
+                        Console.WriteLine("No results can be found with a cosine similarity greater or equal to 0.25");
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    Console.WriteLine("\nCannot connect to cortical.io API. Aborting!\n\nError: " + ex.Message);
-                    Console.ReadLine();
-                    return;
-                }
+                    bool resultsFound = false;
 
-                //Formats return string as JSON
-                dynamic jsonObj = JsonConvert.DeserializeObject<dynamic>(result);
+                    matchNum = matchNum.OrderByDescending(x => x.Key).ToList();
+                    matchParagraph = matchParagraph.OrderByDescending(x => x.Key).ToList();
 
-                List<KeyValuePair<double, int>> cosineNum = new List<KeyValuePair<double, int>>();
-                List<KeyValuePair<double, string>> cosineParagraph = new List<KeyValuePair<double, string>>();
-
-                //Calculates match percent for each return object which correlates to each resume
-                for (int i = 0; i < jsonObj.Count; i++)
-                {
-                    double cosineSim = Math.Round((double)jsonObj[i].cosineSimilarity, 3);
-
-                    cosineNum.Add(new KeyValuePair<double, int>(cosineSim, i));
-                    cosineParagraph.Add(new KeyValuePair<double, string>(cosineSim, paragraphs[i]));
-                }
-                cosineNum = cosineNum.OrderByDescending(x => x.Key).ToList();
-                cosineParagraph = cosineParagraph.OrderByDescending(x => x.Key).ToList();
-
-                Console.WriteLine("\nResults:\n");
-                for (int i = 0; i < cosineNum.Count; i++)
-                {
-                    if (cosineNum[i].Key >= 0.25)
+                    Console.WriteLine("\nResults:\n");
+                    for (int i = 0; i < matchNum.Count; i++)
                     {
-                        Console.WriteLine(i + 1 + ".) " + cosineParagraph[i].Value + "\n" + cosineNum[i].Key + " Cosine Similarity\n");
+                        if (matchNum[i].Key >= 1)
+                        {
+                            resultsFound = true;
+                            Console.WriteLine(i + 1 + ".) " + matchParagraph[i].Value + "\n" + matchNum[i].Key + "% match\n");
+                        }
+                    }
+                    if (resultsFound == false)
+                    {
+                        Console.WriteLine("No results can be found with a match score greater or equal to 1%");
                     }
                 }
                 Console.ReadLine();
