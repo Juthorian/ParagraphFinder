@@ -25,9 +25,9 @@ namespace ParagraphFinder
 
             try
             {
-                //Read lib.txt file
-                var lines = File.ReadLines("lib.txt");
-                int lineCount = File.ReadLines("lib.txt").Count();
+                //Read LibraryCSV file
+                var lines = File.ReadLines("LibraryCSV.txt");
+                int lineCount = File.ReadLines("LibraryCSV.txt").Count();
 
                 library = new List<string>[lineCount];
                 int count2 = 0;
@@ -298,7 +298,7 @@ namespace ParagraphFinder
                     //No results found
                     if (resultsFound == false)
                     {
-                        Console.WriteLine("No results can be found with a cosine similarity greater or equal to 0.25.\nPress any key to end program.");
+                        Console.WriteLine("No results can be found with a cosine similarity greater or equal to 0.25.");
                     }
                 }
                 //Use library
@@ -323,9 +323,10 @@ namespace ParagraphFinder
                     //No results found
                     if (resultsFound == false)
                     {
-                        Console.WriteLine("No results can be found with a match score greater or equal to 1%.\nPress any key to end program.");
+                        Console.WriteLine("No results can be found with a match score greater or equal to 1%.");
                     }
                 }
+                Console.WriteLine("\nPress any key to end program.");
                 Console.ReadKey();
             }
             //User closed File Selection Dialogue
