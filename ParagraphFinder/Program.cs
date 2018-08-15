@@ -16,6 +16,7 @@ namespace ParagraphFinder
 {
     class Program
     {
+        //To allow Open File Dialogue
         [STAThread]
         static void Main(string[] args)
         {
@@ -31,10 +32,14 @@ namespace ParagraphFinder
                 library = new List<string>[lineCount];
                 int count2 = 0;
 
+                //Go through each line (categories) of the file
                 foreach (var line in lines)
                 {
+                    //Load array with line contents
                     var values = line.Split(',');
+                    //Initialize new list in array of lists
                     library[count2] = new List<string>();
+                    //Add contents of array to list
                     foreach (var item in values)
                     {
                         library[count2].Add(item);
@@ -48,16 +53,25 @@ namespace ParagraphFinder
                 isLibEnabled = false;
             }
 
+            //Get starting location for Open File Dialogue
             string userName = Environment.UserName;
             string fileLocationStart = "c:\\Users\\" + userName + "\\Desktop\\";
 
-            Console.WriteLine("Please enter a keyword:");
-            string keyword = Console.ReadLine();
+            string keyword = "";
+            //Continously ask user for keyword until a proper keyword is entered
+            do
+            {
+                Console.WriteLine("Please enter a keyword:");
+                keyword = Console.ReadLine();
+
+            }
+            while (keyword == "");
 
             int inLibNum = -1;
             //Check if using library
             if (isLibEnabled == true)
             {
+                //Find which category from the library the keyword is in
                 for (int i = 0; i < library.Length; i++)
                 {
                     if (library[i].Contains(keyword, StringComparer.OrdinalIgnoreCase))
@@ -74,11 +88,13 @@ namespace ParagraphFinder
 
             Console.WriteLine("\nPlease select a file:");
 
+            //Request file
             OpenFileDialog fbd = new OpenFileDialog();
             fbd.Title = "Open File";
             fbd.Filter = "WORD (.docx, or .doc,)|*.docx;*.doc";
             fbd.InitialDirectory = fileLocationStart;
 
+            //File successfully found
             if (fbd.ShowDialog() == DialogResult.OK)
             {
                 string ext = System.IO.Path.GetExtension(fbd.FileName);
@@ -107,7 +123,9 @@ namespace ParagraphFinder
                 }
                 catch
                 {
-                    MessageBox.Show(fbd.FileName + " cannot be opened! Skipping this file.", "Error!", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+                    MessageBox.Show(fbd.FileName + " cannot be opened!\nPress any key to end program.", "Error!", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+                    Console.ReadKey();
+                    return;
                 }
 
                 string postData = "[";
@@ -117,8 +135,10 @@ namespace ParagraphFinder
                 List<KeyValuePair<double, string>> matchParagraph = new List<KeyValuePair<double, string>>();
 
                 int count = 0;
+                //Loop through each paragraph in the file
                 foreach (string paragraph in convText.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries))
                 {
+                    //Not a empty line
                     if (String.IsNullOrWhiteSpace(paragraph) == false)
                     {
                         paragraphs.Add(paragraph);
@@ -173,6 +193,7 @@ namespace ParagraphFinder
                         }
                         string newConvText = new string(builder.ToArray());
 
+                        //Build api post request for cortical
                         postData += "[{\"term\": \"" + keyword + "\"},{\"text\": \"" + newConvText + "\"}],";
 
                         if (inLibNum != -1)
@@ -200,6 +221,7 @@ namespace ParagraphFinder
                                     }
                                 }
                             }
+                            //Calculate match percent
                             double totalMatchScore = 0;
                             totalMatchScore = (numExactMatches + ((double)numCategoryMatches / 10)) * 10;
 
@@ -209,6 +231,7 @@ namespace ParagraphFinder
                         count++;
                     }
                 }
+                //Remove trailing ',' and replace with ']' closing the post request
                 postData = postData.Remove(postData.Length - 1, 1) + "]";
 
                 //Use cortical.io
@@ -238,8 +261,8 @@ namespace ParagraphFinder
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine("\nCannot connect to cortical.io API. Aborting!\n\nError: " + ex.Message);
-                        Console.ReadLine();
+                        Console.WriteLine("\nCannot connect to cortical.io API. Aborting!\n\nError: " + ex.Message + "\nPress any key to end program.");
+                        Console.ReadKey();
                         return;
                     }
 
@@ -265,39 +288,51 @@ namespace ParagraphFinder
                     Console.WriteLine("\nResults:\n");
                     for (int i = 0; i < cosineNum.Count; i++)
                     {
+                        //Only display results with cosine of 0.25 or greater
                         if (cosineNum[i].Key >= 0.25)
                         {
                             resultsFound = true;
                             Console.WriteLine(i + 1 + ".) " + cosineParagraph[i].Value + "\n" + cosineNum[i].Key + " Cosine Similarity\n");
                         }
                     }
+                    //No results found
                     if (resultsFound == false)
                     {
-                        Console.WriteLine("No results can be found with a cosine similarity greater or equal to 0.25");
+                        Console.WriteLine("No results can be found with a cosine similarity greater or equal to 0.25.\nPress any key to end program.");
                     }
                 }
+                //Use library
                 else
                 {
                     bool resultsFound = false;
 
+                    //Order results
                     matchNum = matchNum.OrderByDescending(x => x.Key).ToList();
                     matchParagraph = matchParagraph.OrderByDescending(x => x.Key).ToList();
 
                     Console.WriteLine("\nResults:\n");
                     for (int i = 0; i < matchNum.Count; i++)
                     {
+                        //Only show results with atleast 1% match
                         if (matchNum[i].Key >= 1)
                         {
                             resultsFound = true;
                             Console.WriteLine(i + 1 + ".) " + matchParagraph[i].Value + "\n" + matchNum[i].Key + "% match\n");
                         }
                     }
+                    //No results found
                     if (resultsFound == false)
                     {
-                        Console.WriteLine("No results can be found with a match score greater or equal to 1%");
+                        Console.WriteLine("No results can be found with a match score greater or equal to 1%.\nPress any key to end program.");
                     }
                 }
-                Console.ReadLine();
+                Console.ReadKey();
+            }
+            //User closed File Selection Dialogue
+            else
+            {
+                Console.WriteLine("\nFile Not Selected! Press any key to end program.");
+                Console.ReadKey();
             }
         }
     }
